@@ -1,4 +1,4 @@
-#include "sensors.h"
+#include "Sensors.h"
 
 const char *Temp PROGMEM = "temp";
 const char *Hum PROGMEM = "hum";
