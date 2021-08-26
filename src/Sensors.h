@@ -13,6 +13,9 @@
 #include <Adafruit_SGP40.h>
 #include "SparkFun_SCD30_Arduino_Library.h"
 #include <ccs811.h>
+#include <BH1750.h>
+#include <Adafruit_Si7021.h>
+#include <Adafruit_HTU21DF.h>
 
 extern const char *Temp;
 extern const char *Hum;
@@ -83,6 +86,57 @@ class TemperatureHumiditySensor : public TemperatureSensor {
     virtual String formatValues() override;
 };
 
+class AnalogSensor : public Sensor {
+  public:
+    uint16_t rawValue;
+    float value;
+  protected:
+    String fieldName;
+    uint8_t pin;
+    uint16_t capability;
+  public:
+    AnalogSensor(const char *name, String fieldName, uint8_t pin, uint16_t capability):Sensor(name),fieldName(fieldName),pin(pin),capability(capability)  { }
+    virtual bool init() override;
+    virtual bool readValues() override;
+    virtual void storeValues(Point &point) override;
+    virtual uint16_t getCapabilities() override { return capability; }
+  protected:
+    virtual String formatValues() override;
+};
+
+class IlluminationSensor : public Sensor {
+  public:
+    float lightIntensity;
+  public:
+    IlluminationSensor(const char *name):Sensor(name) {}
+    virtual void storeValues(Point &point) override;
+    virtual uint16_t getCapabilities() override { return SensorCapability::CapLightIntensity; }
+  protected:
+    virtual String formatValues() override;    
+};
+
+class VOCSensor : public Sensor {
+  public:
+    uint16_t raw;
+    uint16_t vocIndex;
+  public:
+    VOCSensor(const char *name):Sensor(name) {}
+    virtual void storeValues(Point &point) override;
+    virtual uint16_t getCapabilities() override { return SensorCapability::CapVoc; }
+  protected:
+    virtual String formatValues() override;    
+};
+
+class CO2Sensor {
+  public:
+    uint16_t co2;
+  public:
+   void storeValues(Point &point);
+   uint16_t getCapabilities() { return SensorCapability::CapCo2; }
+  protected:
+   String formatValues();  
+};
+
 class DHTSensor : public TemperatureHumiditySensor {
   protected:
     DHTesp dht;
@@ -139,23 +193,6 @@ class BMP280Sensor : public TemperatureSensor, public PressureSensor {
     virtual String formatValues() override;
 };
 
-class AnalogSensor : public Sensor {
-  public:
-    uint16_t rawValue;
-    float value;
-  protected:
-    String fieldName;
-    uint8_t pin;
-    uint16_t capability;
-  public:
-    AnalogSensor(const char *name, String fieldName, uint8_t pin, uint16_t capability):Sensor(name),fieldName(fieldName),pin(pin),capability(capability)  { }
-    virtual bool init() override;
-    virtual bool readValues() override;
-    virtual void storeValues(Point &point) override;
-    virtual uint16_t getCapabilities() override { return capability; }
-  protected:
-    virtual String formatValues() override;
-};
 
 class SHTC3Sensor : public TemperatureHumiditySensor {
  protected:
@@ -164,18 +201,6 @@ class SHTC3Sensor : public TemperatureHumiditySensor {
     SHTC3Sensor():TemperatureHumiditySensor("SHTC3") {}
     virtual bool init() override;
     virtual bool readValues() override;
-};
-
-class VOCSensor : public Sensor {
-  public:
-    uint16_t raw;
-    uint16_t vocIndex;
-  public:
-    VOCSensor(const char *name):Sensor(name) {}
-    virtual void storeValues(Point &point) override;
-    virtual uint16_t getCapabilities() override { return SensorCapability::CapVoc; }
-  protected:
-    virtual String formatValues() override;    
 };
 
 class SGP40Sensor : public VOCSensor {
@@ -188,12 +213,7 @@ class SGP40Sensor : public VOCSensor {
     bool readValues(float temp, float hum);
 };
 
-class CO2Sensor {
-  public:
-    uint16_t co2;
-  public:
-    virtual uint16_t getCapabilities() { return SensorCapability::CapCo2; }
-};
+
 
 class SCD30Sensor : public TemperatureHumiditySensor, public CO2Sensor {
   protected:
@@ -219,6 +239,35 @@ class CCS811Sensor : public VOCSensor, public CO2Sensor {
     virtual uint16_t getCapabilities() override { return VOCSensor::getCapabilities()|CO2Sensor::getCapabilities(); }
   protected:
     virtual String formatValues() override;
+};
+
+class SI702xSensor: public TemperatureHumiditySensor {
+  private:
+    Adafruit_Si7021 si7021;
+    String typ;
+  public:
+    SI702xSensor():TemperatureHumiditySensor("SI702x") {}
+    virtual bool init() override;
+    virtual bool readValues() override;
+    String getType() { return typ; }
+};
+
+class HTU21DSensor: public TemperatureHumiditySensor {
+  private:
+    Adafruit_HTU21DF htu;
+  public:
+    HTU21DSensor():TemperatureHumiditySensor("HTU21D") {}
+    virtual bool init() override;
+    virtual bool readValues() override;
+};
+
+class BH1750Sensor : public IlluminationSensor {
+  public:
+    BH1750 lightMeter;
+  public:
+    BH1750Sensor():IlluminationSensor("BH1750") {};
+    virtual bool init() override;
+    virtual bool readValues() override;
 };
 
 #endif //SENSORS_H

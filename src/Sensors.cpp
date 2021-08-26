@@ -252,7 +252,7 @@ String AnalogSensor::formatValues() {
 }
 
 
-// ===========  SHT31  ==================
+// ===========  SHTC3Sensor  ==================
 
 bool SHTC3Sensor::init() {
   status = shtc3.begin();
@@ -284,6 +284,18 @@ void VOCSensor::storeValues(Point &point) {
 String VOCSensor::formatValues() {
   char buff[30];
   sprintf_P(buff, PSTR(" %6dr %3dv"), raw, vocIndex);
+  return buff;
+}
+
+// ===========  Co2Sensor  ==================
+
+void CO2Sensor::storeValues(Point &point) {
+  point.addField(FPSTR(Co2),(float)co2);
+}
+
+String CO2Sensor::formatValues() {
+  char buff[30];
+  sprintf_P(buff, PSTR(" %5dppm"), co2);
   return buff;
 }
 
@@ -327,15 +339,13 @@ bool SCD30Sensor::readValues() {
 
 void SCD30Sensor::storeValues(Point &point) {
   TemperatureHumiditySensor::storeValues(point);
-  point.addField(FPSTR(Co2),(float)co2);
+  CO2Sensor::storeValues(point);
 }
 
 String SCD30Sensor::formatValues() {
   String ret;
   ret.reserve(50);
-  char buff[15];
-  sprintf_P(buff, PSTR(" %5dppm"), co2);
-  ret = buff;
+  ret += CO2Sensor::formatValues();
   ret += TemperatureHumiditySensor::formatValues();
   return ret;
 }
@@ -373,15 +383,114 @@ bool CCS811Sensor::readValues() {
 }
 
 void CCS811Sensor::storeValues(Point &point) {
+  CO2Sensor::storeValues(point); 
   VOCSensor::storeValues(point);
-  point.addField(FPSTR(Co2),(float)co2);
 }
 
 String CCS811Sensor::formatValues() {
   String ret;
-  char buff[15];
-  sprintf_P(buff, PSTR(" %5dppm"), co2);
-  ret += buff;
+  ret.reserve(50);
+  ret += CO2Sensor::formatValues();
   ret += VOCSensor::formatValues();
   return ret;
+}
+
+// ===========  SI702xSensor  ==================
+
+bool SI702xSensor::init() {
+  status = si7021.begin();
+  if(status) {
+    switch(si7021.getModel()) {
+      case SI_Engineering_Samples:
+        typ = F("SI engineering sample");
+        break;
+      case SI_7013:
+        typ = F("Si7013");
+        break;
+      case SI_7020:
+        typ = F("Si7020");
+        break;
+      case SI_7021:
+        typ = F("Si7021");
+        break;
+      case SI_UNKNOWN:
+      default:
+        typ = F("Unknown");
+    }
+  } else {
+    error = F("Si702x init err");
+  }
+  return status;
+}
+
+bool SI702xSensor::readValues() {
+  float t = si7021.readTemperature();
+  if(!isnan(t)) {
+    temp = t;
+    float h = si7021.readHumidity();
+    if(!isnan(h)) {
+      hum = h;
+    }
+  } else {
+    error = F("SI702X err");
+    return false;
+  }
+  return true;
+}
+
+// ===========  SHTC3Sensor  ==================
+
+bool HTU21DSensor::init() {
+  status = htu.begin();
+  if(!status) {
+    error = F("HTU21D init err");
+  }
+  return status;
+}
+
+bool HTU21DSensor::readValues() {
+  float t = htu.readTemperature();
+  if(!isnan(t)) {
+    temp = t;
+    float h = htu.readHumidity();
+    if(!isnan(h)) {
+      hum = h;
+    }
+  } else {
+    error = F("HTU21D err");
+    return false;
+  }
+  return true;
+}
+
+// ===========  IlluminationSensor  ==================
+
+void IlluminationSensor::storeValues(Point &point) {
+  point.addField(F("light"),lightIntensity);
+}
+
+String IlluminationSensor::formatValues() {
+  char buff[20];
+  sprintf_P(buff, PSTR(" %3.1flux"), lightIntensity);
+  return buff;
+}
+
+
+// ===========  BH1750Sensor  ==================
+
+bool BH1750Sensor::init() {
+  status = lightMeter.begin();
+  if(!status) {
+    error = F("BH1750 init err");
+  }
+  return status;
+}
+
+bool BH1750Sensor::readValues() {
+  lightIntensity = lightMeter.readLightLevel();;
+  if(lightIntensity < 0) {
+    error = F("BH1750 err");
+    return false;
+  }
+  return true;
 }
