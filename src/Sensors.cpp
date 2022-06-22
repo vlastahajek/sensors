@@ -23,8 +23,8 @@ void TemperatureSensor::storeValues(Point &point) {
 }
 
 String TemperatureSensor::formatValues() {
-  char buff[10];
-  sprintf_P(buff, PSTR("%3.1f°C"), temp);
+  char buff[30];
+  snprintf_P(buff, 30, PSTR("%3.1f°C"), temp);
   return buff;
 }
 
@@ -36,11 +36,11 @@ void TemperatureHumiditySensor::storeValues(Point &point) {
 }
 
 String TemperatureHumiditySensor::formatValues() {
-  char buff[10];
+  char buff[30];
   String ret;
-  ret.reserve(20);
+  ret.reserve(50);
   ret += TemperatureSensor::formatValues();
-  sprintf_P(buff, PSTR("  %2.0f%%"), hum);
+  snprintf_P(buff,30, PSTR("  %2.0f%%"), hum);
   ret += buff;
   return ret;
 }
@@ -63,11 +63,12 @@ bool DHTSensor::readValues() {
   hum = dht.getHumidity();
   if (isnan(temp) || isnan(hum)) {
     error = F("DHT err");
-    return false;
+    status = false;
   } else {
     error = "";
-    return true;
+    status = true;
   }
+  return status;
 }
 
 // ===========  BME280  ==================
@@ -94,11 +95,11 @@ void BME280Sensor::storeValues(Point &point) {
 }
 
 String BME280Sensor::formatValues() {
-  char buff[15];
+  char buff[30];
   String ret;
-  ret.reserve(30);
+  ret.reserve(50);
   ret += TemperatureHumiditySensor::formatValues();
-  sprintf_P(buff, PSTR("  %4.0fhPa"), pressSeaLevel);
+  snprintf_P(buff, 30, PSTR("  %4.0fhPa"), pressSeaLevel);
   ret += buff;
   return ret;
 }
@@ -107,6 +108,7 @@ bool BME280Sensor::readValues() {
   bme.takeForcedMeasurement();
   temp = bme.readTemperature();
   error = "";
+  status = false;
   if(isnan(temp)) {
     error = F("BME280 temp error");
     return false;
@@ -124,7 +126,8 @@ bool BME280Sensor::readValues() {
     pressSeaLevel = bme.seaLevelForAltitude(altitude, pressRaw)/100.0;
     pressRaw /= 100.0;
   }
-  return true;
+  status = true;
+  return status;
 }
 
 // ===========  SHT31  ==================
@@ -138,6 +141,7 @@ bool SHT31Sensor::init() {
 }
 
 bool SHT31Sensor::readValues() {
+  status = false;
   if(sht31.readTempHum()) {
     int16_t t = sht31.readTemperature();
     int16_t h = sht31.readHumidity();
@@ -159,9 +163,12 @@ bool SHT31Sensor::readValues() {
     return false;
   }
   error = "";
+  status = true;
   return true;
 }
 
+
+#ifdef SENSORS_INCLUDE_ONEWIRE
 // ===========  DS18B20Sensor  ==================
 
 bool DS18B20Sensor::init() {
@@ -175,15 +182,17 @@ bool DS18B20Sensor::init() {
 
 bool DS18B20Sensor::readValues() {
   sensor.requestTemperatures();
-  
+  status = false;
   temp = sensor.getTempCByIndex(0);
   if(temp == DEVICE_DISCONNECTED_C) {
     error = F("DS18b20 error");
     return false;
   } 
+  status = true;
   return true;
 }
 
+#endif
 // ===========  BMP280Sensor  ==================
 
 bool BMP280Sensor::init() {
@@ -197,6 +206,7 @@ bool BMP280Sensor::init() {
 bool BMP280Sensor::readValues() {
   temp = bmp.readTemperature();
   error = "";
+  status = false;
   if(isnan(temp)) {
     error = F("BMP280 temp error");
     return false;
@@ -209,6 +219,7 @@ bool BMP280Sensor::readValues() {
     pressSeaLevel = bmp.seaLevelForAltitude(altitude, pressRaw)/100.0;
     pressRaw /= 100.0;
   }
+  status = true;
   return true;
 }
 
@@ -219,11 +230,11 @@ void BMP280Sensor::storeValues(Point &point) {
 }
 
 String BMP280Sensor::formatValues() {
-  char buff[15];
+  char buff[30];
   String ret;
-  ret.reserve(30);
+  ret.reserve(50);
   ret += TemperatureSensor::formatValues();
-  sprintf_P(buff, PSTR("  %4.0fhPa"), pressSeaLevel);
+  snprintf_P(buff, 30, PSTR("  %4.0fhPa"), pressSeaLevel);
   ret += buff;
   return ret;
 }
@@ -237,17 +248,19 @@ bool AnalogSensor::init() {
 
 bool AnalogSensor::readValues() {
   rawValue = analogRead(pin);
-  value = (rawValue/4095.0)*3.3;
+  value = (rawValue/4095.0)*maxValue;
+  status = true;
   return true;
 }
 
 void AnalogSensor::storeValues(Point &point) {
   point.addField(fieldName, value);
+  point.addField(fieldName + "_raw", rawValue);
 }
 
 String AnalogSensor::formatValues() {
-  char buff[15];
-  sprintf_P(buff, PSTR(" %4d  %1.3fV"), rawValue, value);
+  char buff[30];
+  snprintf_P(buff, 30, PSTR(" %4d  %1.3fV"), rawValue, value);
   return buff;
 }
 
@@ -264,6 +277,7 @@ bool SHTC3Sensor::init() {
 
 bool SHTC3Sensor::readValues() {
   sensors_event_t humidity, temperature;
+  status = false;
   if(shtc3.getEvent(&humidity, &temperature)) {
     temp = temperature.temperature;
     hum = humidity.relative_humidity;
@@ -271,6 +285,7 @@ bool SHTC3Sensor::readValues() {
     error = F("SHTC3 err");
     return false;
   }
+  status = true;
   return true;
 }
 
@@ -283,7 +298,7 @@ void VOCSensor::storeValues(Point &point) {
 
 String VOCSensor::formatValues() {
   char buff[30];
-  sprintf_P(buff, PSTR(" %6dr %3dv"), raw, vocIndex);
+  snprintf_P(buff, 30, PSTR(" %6dr %3dv"), raw, vocIndex);
   return buff;
 }
 
@@ -295,7 +310,7 @@ void CO2Sensor::storeValues(Point &point) {
 
 String CO2Sensor::formatValues() {
   char buff[30];
-  sprintf_P(buff, PSTR(" %5dppm"), co2);
+  snprintf_P(buff, 30, PSTR(" %5dppm"), co2);
   return buff;
 }
 
@@ -312,6 +327,7 @@ bool SGP40Sensor::init() {
 bool SGP40Sensor::readValues(float temp, float hum) {
   raw = sgp.measureRaw(temp, hum );
   vocIndex = sgp.measureVocIndex(temp, hum);
+  status = true;
   return true;
 }
 
@@ -326,14 +342,20 @@ bool SCD30Sensor::init() {
 }
 
 bool SCD30Sensor::readValues() {
+  status = false;
   if (scd30.dataAvailable()) {
     co2 = scd30.getCO2();
     temp = scd30.getTemperature();
     hum = scd30.getHumidity();
+    if(!co2) {
+      error = F("SCD30 read err: invalid sample detected");
+      return false;
+    }
   } else {
     error = F("SCD30 read error");
     return false;
   }
+  status = true;
   return true;
 }
 
@@ -346,6 +368,7 @@ String SCD30Sensor::formatValues() {
   String ret;
   ret.reserve(50);
   ret += CO2Sensor::formatValues();
+  ret += ' ';
   ret += TemperatureHumiditySensor::formatValues();
   return ret;
 }
@@ -369,6 +392,7 @@ bool CCS811Sensor::init() {
 bool CCS811Sensor::readValues() {
   uint16_t errstat;
   ccs811.read(&co2,&vocIndex,&errstat,&raw); 
+  status = false;
   if( errstat!=CCS811_ERRSTAT_OK ) { 
     if( errstat==CCS811_ERRSTAT_OK_NODATA ) {
       error = F("CCS811: waiting for (new) data");
@@ -379,6 +403,7 @@ bool CCS811Sensor::readValues() {
     }
     return false;
   }
+  status = true;
   return true;
 }
 
@@ -425,6 +450,7 @@ bool SI702xSensor::init() {
 
 bool SI702xSensor::readValues() {
   float t = si7021.readTemperature();
+  status = false;
   if(!isnan(t)) {
     temp = t;
     float h = si7021.readHumidity();
@@ -435,6 +461,7 @@ bool SI702xSensor::readValues() {
     error = F("SI702X err");
     return false;
   }
+  status = true;
   return true;
 }
 
@@ -449,6 +476,7 @@ bool HTU21DSensor::init() {
 }
 
 bool HTU21DSensor::readValues() {
+  status = false;
   float t = htu.readTemperature();
   if(!isnan(t)) {
     temp = t;
@@ -460,6 +488,7 @@ bool HTU21DSensor::readValues() {
     error = F("HTU21D err");
     return false;
   }
+  status = true;
   return true;
 }
 
@@ -470,8 +499,8 @@ void IlluminationSensor::storeValues(Point &point) {
 }
 
 String IlluminationSensor::formatValues() {
-  char buff[20];
-  sprintf_P(buff, PSTR(" %3.1flux"), lightIntensity);
+  char buff[30];
+  snprintf_P(buff, 30, PSTR(" %3.1flux"), lightIntensity);
   return buff;
 }
 
@@ -488,9 +517,70 @@ bool BH1750Sensor::init() {
 
 bool BH1750Sensor::readValues() {
   lightIntensity = lightMeter.readLightLevel();;
+  status = false;
   if(lightIntensity < 0) {
     error = F("BH1750 err");
     return false;
   }
+  status = true;
   return true;
+}
+
+
+// ===========  SCD41Sensor  ==================
+
+#define MESSAGE_SIZE 256
+bool SCD41Sensor::init() {
+  char buff[MESSAGE_SIZE];
+  scd4x.begin(Wire);
+  status = true;
+   // stop potentially previously started measurement
+  uint16_t err = scd4x.stopPeriodicMeasurement(); 
+  if(err) {
+    error = F("SCD41 init err: ");
+    errorToString(err, buff, MESSAGE_SIZE);
+    error += buff;
+    status = false;
+  } else {
+    err = scd4x.startPeriodicMeasurement();
+    if (err) {
+      error = F("SCD41 start err: ");
+      errorToString(err, buff, MESSAGE_SIZE);
+      error += buff;
+      status = false;
+    }
+  }
+  return status;
+}
+
+bool SCD41Sensor::readValues() {
+  uint16_t err = scd4x.readMeasurement(co2, temp, hum); 
+  char buff[MESSAGE_SIZE];
+  status = false;
+  if (err) {
+      error = F("SCD41 read err: ");
+      errorToString(err, buff, MESSAGE_SIZE);
+      error += buff;
+      return false;
+  }
+  if(!co2) {
+    error = F("SCD41 read err: invalid sample detected");
+    return false;
+  }
+  status = true;
+  return true;
+}
+
+void SCD41Sensor::storeValues(Point &point) {
+  TemperatureHumiditySensor::storeValues(point);
+  CO2Sensor::storeValues(point);
+}
+
+String SCD41Sensor::formatValues() {
+  String ret;
+  ret.reserve(50);
+  ret += CO2Sensor::formatValues();
+  ret += " ";
+  ret += TemperatureHumiditySensor::formatValues();
+  return ret;
 }

@@ -1,21 +1,28 @@
 #ifndef SENSORS_H
 #define SENSORS_H
 
+#ifndef ESP32
+#define SENSORS_INCLUDE_ONEWIRE
+#endif
+
 #include <Arduino.h>
 #include <InfluxDbClient.h>
 #include <DHTesp.h>
 #include <Adafruit_BME280.h>
 #include <Adafruit_SHT31.h>
+#ifdef SENSORS_INCLUDE_ONEWIRE
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#endif
 #include <Adafruit_BMP280.h>
 #include <Adafruit_SHTC3.h>
 #include <Adafruit_SGP40.h>
-#include "SparkFun_SCD30_Arduino_Library.h"
+#include <SparkFun_SCD30_Arduino_Library.h>
 #include <ccs811.h>
 #include <BH1750.h>
 #include <Adafruit_Si7021.h>
 #include <Adafruit_HTU21DF.h>
+#include <SensirionI2CScd4x.h>
 
 extern const char *Temp;
 extern const char *Hum;
@@ -90,12 +97,13 @@ class AnalogSensor : public Sensor {
   public:
     uint16_t rawValue;
     float value;
+    float maxValue;
   protected:
     String fieldName;
     uint8_t pin;
     uint16_t capability;
   public:
-    AnalogSensor(const char *name, String fieldName, uint8_t pin, uint16_t capability):Sensor(name),fieldName(fieldName),pin(pin),capability(capability)  { }
+    AnalogSensor(const char *name, String fieldName, uint8_t pin, uint16_t capability, float max = 3.3):Sensor(name),fieldName(fieldName),pin(pin),capability(capability), maxValue(max)  { }
     virtual bool init() override;
     virtual bool readValues() override;
     virtual void storeValues(Point &point) override;
@@ -170,6 +178,7 @@ class SHT31Sensor : public TemperatureHumiditySensor {
     virtual bool readValues() override;
 };
 
+#ifdef SENSORS_INCLUDE_ONEWIRE
 class DS18B20Sensor : public TemperatureSensor {
   protected:
     OneWire oneWire;
@@ -179,6 +188,7 @@ class DS18B20Sensor : public TemperatureSensor {
     virtual bool init() override;
     virtual bool readValues() override;
 };
+#endif
 
 class BMP280Sensor : public TemperatureSensor, public PressureSensor {
   protected:
@@ -268,6 +278,19 @@ class BH1750Sensor : public IlluminationSensor {
     BH1750Sensor():IlluminationSensor("BH1750") {};
     virtual bool init() override;
     virtual bool readValues() override;
+};
+
+class SCD41Sensor : public TemperatureHumiditySensor, public CO2Sensor {
+  protected:
+    SensirionI2CScd4x scd4x;
+  public:
+    SCD41Sensor():TemperatureHumiditySensor("SCD41") { }
+    virtual bool init() override;
+    virtual bool readValues() override;
+    virtual void storeValues(Point &point) override;
+    virtual uint16_t getCapabilities() override { return TemperatureHumiditySensor::getCapabilities()|CO2Sensor::getCapabilities(); }
+  protected:
+    virtual String formatValues() override;
 };
 
 #endif //SENSORS_H
