@@ -293,12 +293,12 @@ bool SHTC3Sensor::readValues() {
 
 void VOCSensor::storeValues(Point &point) {
   point.addField(F("voc"),(float)vocIndex);
-  point.addField(F("gas_resistance"),(float)raw);
+  point.addField(F("gas_resistance"),(float)vocRaw);
 }
 
 String VOCSensor::formatValues() {
   char buff[30];
-  snprintf_P(buff, 30, PSTR(" %6dr %3dv"), raw, vocIndex);
+  snprintf_P(buff, 30, PSTR(" %6dr %3dv"), vocRaw, vocIndex);
   return buff;
 }
 
@@ -325,7 +325,7 @@ bool SGP40Sensor::init() {
 }
 
 bool SGP40Sensor::readValues(float temp, float hum) {
-  raw = sgp.measureRaw(temp, hum );
+  vocRaw = sgp.measureRaw(temp, hum );
   vocIndex = sgp.measureVocIndex(temp, hum);
   status = true;
   return true;
@@ -391,15 +391,15 @@ bool CCS811Sensor::init() {
 
 bool CCS811Sensor::readValues() {
   uint16_t errstat;
-  ccs811.read(&co2,&vocIndex,&errstat,&raw); 
+  ccs811.read(&co2,&vocIndex,&errstat,&vocRaw); 
   status = false;
-  if( errstat!=CCS811_ERRSTAT_OK ) { 
-    if( errstat==CCS811_ERRSTAT_OK_NODATA ) {
+  if( errstat != CCS811_ERRSTAT_OK ) { 
+    if( errstat == CCS811_ERRSTAT_OK_NODATA ) {
       error = F("CCS811: waiting for (new) data");
     } else if( errstat & CCS811_ERRSTAT_I2CFAIL ) { 
       error = F("CCS811: I2C error");
     } else {
-      error =  ccs811.errstat_str(errstat);
+      error = ccs811.errstat_str(errstat);
     }
     return false;
   }
@@ -466,7 +466,6 @@ bool SI702xSensor::readValues() {
 }
 
 // ===========  SHTC3Sensor  ==================
-
 bool HTU21DSensor::init() {
   status = htu.begin();
   if(!status) {
@@ -531,12 +530,12 @@ bool BH1750Sensor::readValues() {
 
 #define MESSAGE_SIZE 256
 bool SCD41Sensor::init() {
-  char buff[MESSAGE_SIZE];
   scd4x.begin(Wire);
   status = true;
    // stop potentially previously started measurement
   uint16_t err = scd4x.stopPeriodicMeasurement(); 
   if(err) {
+    char buff[MESSAGE_SIZE];
     error = F("SCD41 init err: ");
     errorToString(err, buff, MESSAGE_SIZE);
     error += buff;
@@ -544,6 +543,7 @@ bool SCD41Sensor::init() {
   } else {
     err = scd4x.startPeriodicMeasurement();
     if (err) {
+      char buff[MESSAGE_SIZE];
       error = F("SCD41 start err: ");
       errorToString(err, buff, MESSAGE_SIZE);
       error += buff;
@@ -555,9 +555,9 @@ bool SCD41Sensor::init() {
 
 bool SCD41Sensor::readValues() {
   uint16_t err = scd4x.readMeasurement(co2, temp, hum); 
-  char buff[MESSAGE_SIZE];
   status = false;
   if (err) {
+      char buff[MESSAGE_SIZE];
       error = F("SCD41 read err: ");
       errorToString(err, buff, MESSAGE_SIZE);
       error += buff;
@@ -582,5 +582,131 @@ String SCD41Sensor::formatValues() {
   ret += CO2Sensor::formatValues();
   ret += " ";
   ret += TemperatureHumiditySensor::formatValues();
+  return ret;
+}
+
+// ===========  SEN54Sensor  ==================
+
+bool SEN54Sensor::init() {
+  sen5x.begin(Wire);
+  status = true;
+   // stop potentially previously started measurement
+  uint16_t err = sen5x.deviceReset();
+  if(err) {
+    char buff[MESSAGE_SIZE];
+    error = F("SEN54 reset err: ");
+    errorToString(err, buff, MESSAGE_SIZE);
+    error += buff;
+    status = false;
+  } else {
+    err = sen5x.startMeasurement();
+    if (err) {
+      char buff[MESSAGE_SIZE];
+      error = F("SEN54 start err: ");
+      errorToString(err, buff, MESSAGE_SIZE);
+      error += buff;
+      status = false;
+    }
+  }
+  return status;
+}
+
+bool SEN54Sensor::readValues() {
+  float noxIndex;
+  uint16_t err = sen5x.readMeasuredValues(pm1p0, pm2p5, pm4p0,pm10p0, hum, temp, vocIndex, noxIndex);
+  status = false;
+  if (err) {
+      char buff[MESSAGE_SIZE];
+      error = F("SEN54 read err: ");
+      errorToString(err, buff, MESSAGE_SIZE);
+      error += buff;
+      return false;
+  }
+  status = true;
+  return true;
+}
+
+void SEN54Sensor::storeValues(Point &point) {
+  TemperatureHumiditySensor::storeValues(point);
+  point.addField(F("voc"), vocIndex);
+  point.addField(F("pm1.0"), pm1p0);
+  point.addField(F("pm2.5"), pm2p5);
+  point.addField(F("pm4.0"), pm4p0);
+  point.addField(F("pm10.0"), pm10p0);
+}
+
+String SEN54Sensor::formatValues() {
+  char buff[60];
+  String ret;
+  ret.reserve(100);
+  snprintf_P(buff, 60, PSTR(" %3.0fvoc, pm1 %2.1f, pm2.5 %2.1f,pm4 %2.1f,pm10 %2.1f "), vocIndex, pm1p0, pm2p5, pm4p0, pm10p0);
+  ret += buff;
+  ret += TemperatureHumiditySensor::formatValues();
+  return ret;
+}
+// ===========  SGP41Sensor  ==================
+
+static const uint16_t DefaultRh = 0x8000;
+static const uint16_t DefaultT = 0x6666; 
+
+bool SGP41Sensor::init() {
+  char errorMessage[256];  
+  uint16_t testResult;
+  _sgp41.begin(Wire);
+  uint16_t err = _sgp41.executeSelfTest(testResult); 
+  status = false;
+  if (err) {
+        Serial.print("Error trying to execute executeSelfTest(): ");
+        error = F("SPG41 init err: ");
+        errorToString(err, errorMessage, 256);
+        error += errorMessage;
+    } else if (testResult != 0xD400) {
+        error = F("SPG41 test err: ");
+        error += String(testResult, HEX);
+    } else {
+      status = true;
+    }
+  return status;
+}
+
+void SGP41Sensor::storeValues(Point &point) {
+  VOCSensor::storeValues(point);
+  point.addField(F("nox"),(float)noxIndex);
+  point.addField(F("nox_gas_resistance"),(float)noxRaw);
+}
+
+bool SGP41Sensor::readValues(float temp, float hum) {
+  uint16_t err;
+  if(!_timer || ((millis()-_timer)/1000)<10) {
+    if(!_timer) {
+      _timer = millis();
+    }
+    err = _sgp41.executeConditioning(DefaultRh, DefaultT, vocRaw); 
+  } else {
+    temp +=45;
+    temp *= 65535;
+    temp /= 175;
+    hum *= 65535;
+    hum /=100;
+    err = _sgp41.measureRawSignals(hum, temp, vocRaw, noxRaw);
+  }
+  status = true;
+  if(err) {
+    char buff[256];
+    error = F("SGP41 read err: ");
+    errorToString(err, buff, MESSAGE_SIZE);
+    error += buff;
+    status = false;
+  }
+  return status;
+}
+
+String SGP41Sensor::formatValues() {
+  char buff[60];
+  String ret;
+  ret.reserve(100);
+  ret += VOCSensor::formatValues();
+  snprintf_P(buff, 60, PSTR(" nox: %6dr %3dv"), noxRaw, noxIndex);
+  ret += buff;
   return ret;
 }

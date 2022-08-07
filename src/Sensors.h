@@ -23,6 +23,8 @@
 #include <Adafruit_Si7021.h>
 #include <Adafruit_HTU21DF.h>
 #include <SensirionI2CScd4x.h>
+#include <SensirionI2CSen5x.h>
+#include <SensirionI2CSgp41.h>
 
 extern const char *Temp;
 extern const char *Hum;
@@ -32,13 +34,14 @@ extern const char *Co2;
 extern const char *Moist;
 
 enum SensorCapability {
-  CapTemperature = 1,
-  CapHumidity = 2,
-  CapPressure = 4,
-  CapCo2 = 8,
-  CapVoc = 16,
-  CapSoilMoisture = 32,
-  CapLightIntensity = 64
+  CapTemperature = 1<<0,
+  CapHumidity = 1<<1,
+  CapPressure = 1<<2,
+  CapCo2 = 1<<3,
+  CapVoc = 1<<4,
+  CapSoilMoisture = 1<<5,
+  CapLightIntensity = 1<<6,
+  CapDustPPM = 1<<7
 };
 
 class Sensor {
@@ -46,8 +49,11 @@ class Sensor {
     String name;
     String error;
     bool status;
-  public:
+  protected:
     Sensor(const char *name):name(name) { }
+    Sensor() {}
+  public:
+    virtual ~Sensor() {};
     virtual bool init() = 0;
     virtual bool readValues() = 0;
     virtual void storeValues(Point &point) = 0;
@@ -103,7 +109,7 @@ class AnalogSensor : public Sensor {
     uint8_t pin;
     uint16_t capability;
   public:
-    AnalogSensor(const char *name, String fieldName, uint8_t pin, uint16_t capability, float max = 3.3):Sensor(name),fieldName(fieldName),pin(pin),capability(capability), maxValue(max)  { }
+    AnalogSensor(const char *name, const String& fieldName, uint8_t pin, uint16_t capability, float max = 3.3):Sensor(name),fieldName(fieldName),pin(pin), maxValue(max),capability(capability)  { }
     virtual bool init() override;
     virtual bool readValues() override;
     virtual void storeValues(Point &point) override;
@@ -125,10 +131,11 @@ class IlluminationSensor : public Sensor {
 
 class VOCSensor : public Sensor {
   public:
-    uint16_t raw;
+    uint16_t vocRaw;
     uint16_t vocIndex;
   public:
-    VOCSensor(const char *name):Sensor(name) {}
+    VOCSensor():vocRaw(0), vocIndex(0) {}
+    VOCSensor(const char *name):Sensor(name),vocRaw(0), vocIndex(0) {}
     virtual void storeValues(Point &point) override;
     virtual uint16_t getCapabilities() override { return SensorCapability::CapVoc; }
   protected:
@@ -291,6 +298,42 @@ class SCD41Sensor : public TemperatureHumiditySensor, public CO2Sensor {
     virtual uint16_t getCapabilities() override { return TemperatureHumiditySensor::getCapabilities()|CO2Sensor::getCapabilities(); }
   protected:
     virtual String formatValues() override;
+};
+
+class SEN54Sensor : public TemperatureHumiditySensor {
+  protected:
+    SensirionI2CSen5x sen5x;
+  public:
+    float pm1p0;
+    float pm2p5;
+    float pm4p0;
+    float pm10p0;
+    float vocIndex;
+  public:
+    SEN54Sensor():TemperatureHumiditySensor("SEN54") { }
+    virtual bool init() override;
+    virtual bool readValues() override;
+    virtual void storeValues(Point &point) override;
+    virtual uint16_t getCapabilities() override { return TemperatureHumiditySensor::getCapabilities()|SensorCapability::CapVoc|SensorCapability::CapDustPPM; }
+  protected:
+    virtual String formatValues() override;
+};
+
+class SGP41Sensor : public VOCSensor {
+  protected:
+    SensirionI2CSgp41 _sgp41;
+    uint16_t _conditioning_s = 10;
+    uint32_t _timer = 0;
+  public:
+    uint16_t noxRaw = 0;
+    uint16_t noxIndex = 0;
+  public:
+    SGP41Sensor():VOCSensor("SGP41") { }
+    virtual bool init() override;
+    virtual void storeValues(Point &point) override;
+    bool readValues() { return false; }
+    bool readValues(float temp, float hum);
+    String formatValues();
 };
 
 #endif //SENSORS_H
