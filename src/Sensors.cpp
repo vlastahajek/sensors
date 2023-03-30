@@ -247,8 +247,20 @@ bool AnalogSensor::init() {
 }
 
 bool AnalogSensor::readValues() {
-  rawValue = analogRead(pin);
+  uint32_t cum = 0;
+  uint8_t numReadings = 10;
+  for(uint8_t i=0;i<numReadings;i++) {
+    cum += analogRead(pin);
+    delay(1);
+  }
+  rawValue = (uint16_t)cum/numReadings;
+#ifdef ESP32  
   value = (rawValue/4095.0)*maxValue;
+#elif defined(ESP8266)
+  value = (rawValue/1023.0)*maxValue;
+#else
+  value = (rawValue/255.0)*maxValue;
+#endif
   status = true;
   return true;
 }
