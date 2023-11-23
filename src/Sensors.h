@@ -9,13 +9,11 @@
 #include <InfluxDbClient.h>
 #include <DHTesp.h>
 #include <Adafruit_BME280.h>
-#include <Adafruit_SHT31.h>
 #ifdef SENSORS_INCLUDE_ONEWIRE
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #endif
 #include <Adafruit_BMP280.h>
-#include <Adafruit_SHTC3.h>
 #include <Adafruit_SGP40.h>
 #include <SparkFun_SCD30_Arduino_Library.h>
 #include <ccs811.h>
@@ -25,6 +23,7 @@
 #include <SensirionI2CScd4x.h>
 #include <SensirionI2CSen5x.h>
 #include <SensirionI2CSgp41.h>
+#include <SHTSensor.h>
 
 extern const char *Temp;
 extern const char *Hum;
@@ -108,12 +107,18 @@ class AnalogSensor : public Sensor {
     String fieldName;
     uint8_t pin;
     uint16_t capability;
+    uint8_t averagingWindowSize;
+    uint16_t *pAveragingWindow;
+    uint8_t averagingWindowPointer;
+    bool averageWindowWasTop;
   public:
-    AnalogSensor(const char *name, const String& fieldName, uint8_t pin, uint16_t capability, float max = 3.3):Sensor(name),fieldName(fieldName),pin(pin), maxValue(max),capability(capability)  { }
+    AnalogSensor(const char *name, const String& fieldName, uint8_t pin, uint16_t capability, float max = 3.3);
+    virtual ~AnalogSensor();
     virtual bool init() override;
     virtual bool readValues() override;
     virtual void storeValues(Point &point) override;
     virtual uint16_t getCapabilities() override { return capability; }
+    void setAveragingWindowSize(uint8_t size);
   protected:
     virtual String formatValues() override;
 };
@@ -176,13 +181,18 @@ class BME280Sensor : public TemperatureHumiditySensor, public PressureSensor {
     virtual String formatValues() override;
 };
 
-class SHT31Sensor : public TemperatureHumiditySensor {
+class SHTXSensor : public TemperatureHumiditySensor {
   protected:
-    Adafruit_SHT31 sht31;
+    SHTSensor sht;
   public:
-    SHT31Sensor():TemperatureHumiditySensor("SHT31") {}
+    SHTXSensor(const char *name, SHTSensor::SHTSensorType typ):TemperatureHumiditySensor(name),sht(typ) {}
     virtual bool init() override;
     virtual bool readValues() override;
+};
+
+class SHT31Sensor : public SHTXSensor {
+  public:
+    SHT31Sensor():SHTXSensor("SHT31", SHTSensor::SHT3X) {}
 };
 
 #ifdef SENSORS_INCLUDE_ONEWIRE
@@ -211,14 +221,21 @@ class BMP280Sensor : public TemperatureSensor, public PressureSensor {
 };
 
 
-class SHTC3Sensor : public TemperatureHumiditySensor {
- protected:
-    Adafruit_SHTC3 shtc3;
+class SHTC3Sensor : public SHTXSensor {
   public:
-    SHTC3Sensor():TemperatureHumiditySensor("SHTC3") {}
-    virtual bool init() override;
-    virtual bool readValues() override;
+    SHTC3Sensor():SHTXSensor("SHTC3", SHTSensor::SHTC3) {}
 };
+
+class SHT40Sensor : public SHTXSensor {
+  public:
+    SHT40Sensor():SHTXSensor("SHT40", SHTSensor::SHT4X) {}
+};
+
+class SHT41Sensor : public SHTXSensor {
+  public:
+    SHT41Sensor():SHTXSensor("SHT41", SHTSensor::SHT4X) {}
+};
+
 
 class SGP40Sensor : public VOCSensor {
   protected:

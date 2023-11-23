@@ -132,34 +132,43 @@ bool BME280Sensor::readValues() {
 
 // ===========  SHT31  ==================
 
-bool SHT31Sensor::init() {
-  status = sht31.begin(0x44);
-  if(!status) {
-    error = F("SHT31 init err");
-  }
+bool SHTXSensor::init() {
+  status = true;
+  uint8_t err = sht.init();
+  if(err) {
+    error = name;
+    error += F(" init err: ");
+    error += err;
+    status = false;
+  } 
   return status;
 }
 
-bool SHT31Sensor::readValues() {
+bool SHTXSensor::readValues() {
   status = false;
-  if(sht31.readTempHum()) {
-    int16_t t = sht31.readTemperature();
-    int16_t h = sht31.readHumidity();
-    if (t != MAXINT16) {  // check if 'is not a number'
-      temp = t/10.0;
+  uint8_t err = sht.readSample();
+  if(!err) {
+    float t = sht.getTemperature();
+    float h = sht.getHumidity();
+    if (!isnan(t)) {  // check if 'is not a number'
+      temp = t;
     } else { 
-      error = F("SHT31 temp error");
+      error = name;
+      error += F(" temp error");
       return false;
     }
     
-    if (h != MAXINT16) {  // check if 'is not a number'
-      hum = h/10.0; 
+    if (!isnan(h)) {  // check if 'is not a number'
+      hum = h; 
     } else { 
-      error = F("SHT31 hum error");
+      error = name;
+      error += F(" hum error");
       return false;
     }
   } else {
-    error = F("SHT31 read err");
+    error = name;
+    error += F(" read err: ");
+    error += err;
     return false;
   }
   error = "";
@@ -241,6 +250,16 @@ String BMP280Sensor::formatValues() {
 
 // =================== AnalogSensor ===================
 
+AnalogSensor::AnalogSensor(const char *name, const String& fieldName, uint8_t pin, uint16_t capability, float max):
+  Sensor(name),fieldName(fieldName),pin(pin), maxValue(max),capability(capability),
+  averagingWindowSize(0),pAveragingWindow(nullptr),averagingWindowPointer(0),averageWindowWasTop(false) { 
+}
+AnalogSensor::~AnalogSensor() {
+  if(pAveragingWindow) {
+    delete [] pAveragingWindow;
+  }
+}
+
 bool AnalogSensor::init() {
   status = true;
   return true;
@@ -253,7 +272,21 @@ bool AnalogSensor::readValues() {
     cum += analogRead(pin);
     delay(1);
   }
-  rawValue = (uint16_t)cum/numReadings;
+  rawValue = (uint16_t)(cum/numReadings);
+  if(averagingWindowSize) {
+    pAveragingWindow[averagingWindowPointer++] = rawValue;
+    if(averagingWindowPointer == averagingWindowSize) {
+      averagingWindowPointer = 0;
+      averageWindowWasTop = true;
+    }
+    cum = 0;
+    auto top = averageWindowWasTop?averagingWindowSize:averagingWindowPointer;
+    for(auto i=0;i<top;i++) {
+      cum += pAveragingWindow[i];
+    }
+    rawValue = (uint16_t)(cum/top);
+  }
+  
 #ifdef ESP32  
   value = (rawValue/4095.0)*maxValue;
 #elif defined(ESP8266)
@@ -276,30 +309,21 @@ String AnalogSensor::formatValues() {
   return buff;
 }
 
-
-// ===========  SHTC3Sensor  ==================
-
-bool SHTC3Sensor::init() {
-  status = shtc3.begin();
-  if(!status) {
-    error = F("SHTC3 init err");
+void AnalogSensor::setAveragingWindowSize(uint8_t size) {
+  if(pAveragingWindow) {
+    delete [] pAveragingWindow;
+    pAveragingWindow = nullptr;
   }
-  return status;
+  averagingWindowSize = size;
+  averagingWindowPointer = 0;
+  if(size > 0) {
+    pAveragingWindow = new uint16_t[size];
+    for(auto i=0;i<size;i++) {
+      pAveragingWindow[i] = 0;
+    }
+  }
 }
 
-bool SHTC3Sensor::readValues() {
-  sensors_event_t humidity, temperature;
-  status = false;
-  if(shtc3.getEvent(&humidity, &temperature)) {
-    temp = temperature.temperature;
-    hum = humidity.relative_humidity;
-  } else {
-    error = F("SHTC3 err");
-    return false;
-  }
-  status = true;
-  return true;
-}
 
 // ===========  VOCSensor  ==================
 
