@@ -1,4 +1,5 @@
 #include "Sensors.h"
+#include <Wire.h>
 
 const char *Temp PROGMEM = "temp";
 const char *Hum PROGMEM = "hum";
@@ -157,6 +158,54 @@ bool SHTXSensor::readValues() {
   if(!err) {
     float t = sht.getTemperature();
     float h = sht.getHumidity();
+    if (!isnan(t)) {  // check if 'is not a number'
+      temp = t;
+    } else { 
+      error = name;
+      error += F(" temp error");
+      return false;
+    }
+    
+    if (!isnan(h)) {  // check if 'is not a number'
+      hum = h; 
+    } else { 
+      error = name;
+      error += F(" hum error");
+      return false;
+    }
+  } else {
+    error = name;
+    error += F(" read err: ");
+    error += err;
+    return false;
+  }
+  error = "";
+  status = true;
+  return true;
+}
+
+// ===========  SHT31  ==================
+
+bool SHT4XSensor::init() {
+  status = true;
+  sht4x.begin(Wire);
+  uint32_t serialNumber;
+  uint16_t err =sht4x.serialNumber(serialNumber);
+  if(err) {
+    error = name;
+    error += F(" init err: ");
+    error += err;
+    status = false;
+  } 
+  return status;
+}
+
+bool SHT4XSensor::readValues() {
+  status = false;
+  float t;
+  float h;
+  uint16_t err = sht4x.measureHighPrecision(t,h);
+  if(!err) {
     if (!isnan(t)) {  // check if 'is not a number'
       temp = t;
     } else { 

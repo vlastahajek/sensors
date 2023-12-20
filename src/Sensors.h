@@ -23,6 +23,7 @@
 #include <SensirionI2CScd4x.h>
 #include <SensirionI2CSen5x.h>
 #include <SensirionI2CSgp41.h>
+#include <SensirionI2CSht4x.h>
 #include <SHTSensor.h>
 
 extern const char *Temp;
@@ -226,14 +227,13 @@ class SHTC3Sensor : public SHTXSensor {
     SHTC3Sensor():SHTXSensor("SHTC3", SHTSensor::SHTC3) {}
 };
 
-class SHT40Sensor : public SHTXSensor {
+class SHT4XSensor : public TemperatureHumiditySensor {
+  protected:
+   SensirionI2CSht4x sht4x;
   public:
-    SHT40Sensor():SHTXSensor("SHT40", SHTSensor::SHT4X) {}
-};
-
-class SHT41Sensor : public SHTXSensor {
-  public:
-    SHT41Sensor():SHTXSensor("SHT41", SHTSensor::SHT4X) {}
+    SHT4XSensor():TemperatureHumiditySensor("SHT4X") {}
+    virtual bool init() override;
+    virtual bool readValues() override;
 };
 
 
