@@ -12,7 +12,12 @@ String Sensor::toString() {
   ret.reserve(30);
   ret += name;
   ret += ": ";
-  ret += formatValues();
+  if(status) {
+      ret += formatValues();
+  } else {
+    ret += F("ERR: ");
+    ret += error;
+  }
   return ret;
 }
 
@@ -139,6 +144,8 @@ bool SHTXSensor::init() {
     error = name;
     error += F(" init err: ");
     error += err;
+    error += F(" type: ");
+    error += sht.mSensorType;
     status = false;
   } 
   return status;
